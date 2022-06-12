@@ -9,6 +9,10 @@
 
 #define DICTU_STRING_VERSION "Dictu Version: " DICTU_MAJOR_VERSION "." DICTU_MINOR_VERSION "." DICTU_PATCH_VERSION "\n"
 
+#ifdef __cplusplus
+extern "C"{
+#endif 
+
 typedef struct _vm DictuVM;
 
 typedef enum {
@@ -22,5 +26,9 @@ DictuVM *dictuInitVM(bool repl, int argc, char *argv[]);
 void dictuFreeVM(DictuVM *vm);
 
 DictuInterpretResult dictuInterpret(DictuVM *vm, char *moduleName, char *source);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif //dictu_include_h
