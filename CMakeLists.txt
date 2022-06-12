@@ -14,3 +14,6 @@ add_subdirectory(src)
 if (BUILD_CLI)
     add_subdirectory(src/cli)
 endif()
+
+include(cmake/dictu_export.cmake)
+include(cmake/dictu_install.cmake)
