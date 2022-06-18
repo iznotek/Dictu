@@ -89,7 +89,7 @@ typedef struct Compiler {
     Table stringConstants;
 
     struct Compiler *enclosing;
-    ClassCompiler *class;
+    ClassCompiler *classC;
     Loop *loop;
 
     ObjFunction *function;

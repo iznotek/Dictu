@@ -154,13 +154,13 @@ static void initCompiler(Parser *parser, Compiler *compiler, Compiler *parent, F
     compiler->enclosing = parent;
     initTable(&compiler->stringConstants);
     compiler->function = NULL;
-    compiler->class = NULL;
+    compiler->classC = NULL;
     compiler->loop = NULL;
     compiler->withBlock = false;
     compiler->annotations = NULL;
 
     if (parent != NULL) {
-        compiler->class = parent->class;
+        compiler->classC = parent->classC;
         compiler->loop = parent->loop;
     }
 
@@ -650,7 +650,7 @@ static bool privatePropertyExists(Token name, Compiler *compiler) {
     ObjString *string = copyString(compiler->parser->vm, name.start, name.length);
     Value _;
 
-    return tableGet(&compiler->class->privateVariables, string, &_);
+    return tableGet(&compiler->classC->privateVariables, string, &_);
 }
 
 static void dot(Compiler *compiler, Token previousToken, bool canAssign) {
@@ -663,7 +663,7 @@ static void dot(Compiler *compiler, Token previousToken, bool canAssign) {
 
     if (match(compiler, TOKEN_LEFT_PAREN)) {
         int argCount = argumentList(compiler);
-        if (compiler->class != NULL && (previousToken.type == TOKEN_THIS || identifiersEqual(&previousToken, &compiler->class->name))) {
+        if (compiler->classC != NULL && (previousToken.type == TOKEN_THIS || identifiersEqual(&previousToken, &compiler->classC->name))) {
             emitBytes(compiler, OP_INVOKE_INTERNAL, argCount);
         } else {
             emitBytes(compiler, OP_INVOKE, argCount);
@@ -672,7 +672,7 @@ static void dot(Compiler *compiler, Token previousToken, bool canAssign) {
         return;
     }
 
-    if (compiler->class != NULL && (previousToken.type == TOKEN_THIS &&
+    if (compiler->classC != NULL && (previousToken.type == TOKEN_THIS &&
                                     privatePropertyExists(identifier, compiler))) {
         if (canAssign && match(compiler, TOKEN_EQUAL)) {
             expression(compiler);
@@ -841,7 +841,7 @@ static void beginFunction(Compiler *compiler, Compiler *fnCompiler, FunctionType
                 privateIdentifiers[fnCompiler->function->privatePropertyCount] = paramConstant;
                 privateIndexes[fnCompiler->function->privatePropertyCount++] = index;
 
-                tableSet(compiler->parser->vm, &compiler->class->privateVariables,
+                tableSet(compiler->parser->vm, &compiler->classC->privateVariables,
                         AS_STRING(currentChunk(fnCompiler)->constants.values[paramConstant]), EMPTY_VAL);
             } else if (privateKeyword) {
                 error(fnCompiler->parser, "private keyword in a function definition that is not a class constructor");
@@ -1279,16 +1279,16 @@ static Token syntheticToken(const char *text) {
 }
 
 static void pushSuperclass(Compiler *compiler) {
-    if (compiler->class == NULL) return;
+    if (compiler->classC == NULL) return;
     namedVariable(compiler, syntheticToken("super"), false);
 }
 
 static void super_(Compiler *compiler, bool canAssign) {
     UNUSED(canAssign);
 
-    if (compiler->class == NULL) {
+    if (compiler->classC == NULL) {
         error(compiler->parser, "Cannot utilise 'super' outside of a class.");
-    } else if (!compiler->class->hasSuperclass) {
+    } else if (!compiler->classC->hasSuperclass) {
         error(compiler->parser, "Cannot utilise 'super' in a class with no superclass.");
     }
 
@@ -1314,9 +1314,9 @@ static void super_(Compiler *compiler, bool canAssign) {
 static void this_(Compiler *compiler, bool canAssign) {
     UNUSED(canAssign);
 
-    if (compiler->class == NULL) {
+    if (compiler->classC == NULL) {
         error(compiler->parser, "Cannot utilise 'this' outside of a class.");
-    } else if (compiler->class->staticMethod) {
+    } else if (compiler->classC->staticMethod) {
         error(compiler->parser, "Cannot utilise 'this' inside a static method.");
     } else {
         variable(compiler, false);
@@ -1326,9 +1326,9 @@ static void this_(Compiler *compiler, bool canAssign) {
 static void private_(Compiler *compiler, bool canAssign) {
     UNUSED(canAssign);
 
-    if (compiler->class == NULL) {
+    if (compiler->classC == NULL) {
         error(compiler->parser, "Cannot utilise 'private' outside of a class.");
-    } else if (compiler->class->abstractClass) {
+    } else if (compiler->classC->abstractClass) {
         error(compiler->parser, "Cannot utilise 'private' inside of an abstract class.");
     }
 }
@@ -1336,13 +1336,13 @@ static void private_(Compiler *compiler, bool canAssign) {
 static void static_(Compiler *compiler, bool canAssign) {
     UNUSED(canAssign);
 
-    if (compiler->class == NULL) {
+    if (compiler->classC == NULL) {
         error(compiler->parser, "Cannot utilise 'static' outside of a class.");
     }
 }
 
 static void useStatement(Compiler *compiler) {
-    if (compiler->class == NULL) {
+    if (compiler->classC == NULL) {
         error(compiler->parser, "Cannot utilise 'use' outside of a class.");
     }
 
@@ -1546,11 +1546,11 @@ static void method(Compiler *compiler, bool private, Token *identifier) {
     AccessLevel level = ACCESS_PUBLIC;
     FunctionType type;
 
-    compiler->class->staticMethod = false;
+    compiler->classC->staticMethod = false;
     type = TYPE_METHOD;
 
     if (match(compiler, TOKEN_PRIVATE) || private) {
-        if (compiler->class->abstractClass) {
+        if (compiler->classC->abstractClass) {
             error(compiler->parser, "Private methods can not appear within abstract classes.");
             return;
         }
@@ -1560,9 +1560,9 @@ static void method(Compiler *compiler, bool private, Token *identifier) {
 
     if (match(compiler, TOKEN_STATIC)) {
         type = TYPE_STATIC;
-        compiler->class->staticMethod = true;
+        compiler->classC->staticMethod = true;
     } else if (match(compiler, TOKEN_ABSTRACT)) {
-        if (!compiler->class->abstractClass) {
+        if (!compiler->classC->abstractClass) {
             error(compiler->parser, "Abstract methods can only appear within abstract classes.");
             return;
         }
@@ -1603,17 +1603,17 @@ static void method(Compiler *compiler, bool private, Token *identifier) {
 static void setupClassCompiler(Compiler *compiler, ClassCompiler *classCompiler, bool abstract) {
     classCompiler->name = compiler->parser->previous;
     classCompiler->hasSuperclass = false;
-    classCompiler->enclosing = compiler->class;
+    classCompiler->enclosing = compiler->classC;
     classCompiler->staticMethod = false;
     classCompiler->abstractClass = abstract;
     classCompiler->annotations = NULL;
     initTable(&classCompiler->privateVariables);
-    compiler->class = classCompiler;
+    compiler->classC = classCompiler;
 }
 
 static void endClassCompiler(Compiler *compiler, ClassCompiler *classCompiler) {
     freeTable(compiler->parser->vm, &classCompiler->privateVariables);
-    compiler->class = compiler->class->enclosing;
+    compiler->classC = compiler->classC->enclosing;
 
     if (compiler->annotations != NULL) {
         int importConstant = makeConstant(compiler, OBJ_VAL(compiler->annotations));
@@ -1701,7 +1701,7 @@ static void parseClassBody(Compiler *compiler) {
                     if (check(compiler, TOKEN_SEMICOLON)) {
                         uint8_t name = identifierConstant(compiler, &compiler->parser->previous);
                         consume(compiler, TOKEN_SEMICOLON, "Expect ';' after private variable declaration.");
-                        tableSet(compiler->parser->vm, &compiler->class->privateVariables,
+                        tableSet(compiler->parser->vm, &compiler->classC->privateVariables,
                                  AS_STRING(currentChunk(compiler)->constants.values[name]), EMPTY_VAL);
                         continue;
                     }
@@ -2632,7 +2632,7 @@ void grayCompilerRoots(DictuVM *vm) {
     Compiler *compiler = vm->compiler;
 
     while (compiler != NULL) {
-        ClassCompiler *classCompiler = vm->compiler->class;
+        ClassCompiler *classCompiler = vm->compiler->classC;
 
         while (classCompiler != NULL) {
             grayObject(vm, (Obj *) classCompiler->annotations);
